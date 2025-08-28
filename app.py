@@ -54,41 +54,65 @@ def form():
 
 @app.route('/result', methods=['POST'])
 def result():
-    scores = {section: 0 for section in QUESTIONS}
-    answers = {section: [] for section in QUESTIONS}
+    # Coleta e normaliza respostas por seção
+    section_answers = {section: [] for section in QUESTIONS}
     for section, questions in QUESTIONS.items():
         for i in range(len(questions)):
             val = int(request.form.get(f'{section}_{i}', 0))
-            scores[section] += val
-            answers[section].append(val)
-    
-    categories = list(QUESTIONS.keys())
-    values = [scores[cat] / (len(QUESTIONS[cat]) * 5) * 100 for cat in categories]
-    
-    angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-    values += values[:1]
-    angles += angles[:1]
-    
-    fig, ax = plt.subplots(figsize=(6,6), subplot_kw=dict(polar=True))
-    ax.fill(angles, values, color='blue', alpha=0.25)
-    ax.plot(angles, values, color='blue', linewidth=2)
-    ax.set_yticklabels([])
-    ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(categories)
-    ax.set_ylim(0, 100)
-    
+            section_answers[section].append(val)
+
+    # Calcula pontuação total e percentuais médios por seção
+    scores = {}
+    percentages = {}
+    for section, answers in section_answers.items():
+        max_score = len(answers) * 5 if answers else 1
+        total = sum(answers)
+        scores[section] = total
+        percentages[section] = round((total / max_score) * 100, 2)
+
+    # Prepara dados por pergunta (normalizados para 0-100) para cada seção
+    def normalize(values):
+        return [(v / 5) * 100 for v in values]
+
+    lgpd_values = normalize(section_answers.get('LGPD', []))
+    cis_values = normalize(section_answers.get('CIS Controls', []))
+
+    # Cria dois subplots polares (um por seção), com cores distintas
+    fig, (ax_lgpd, ax_cis) = plt.subplots(1, 2, figsize=(12, 6), subplot_kw=dict(polar=True))
+
+    def plot_radar(ax, values, color, title):
+        if not values:
+            values = [0]
+        labels = [f'Q{i+1}' for i in range(len(values))]
+        angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False).tolist()
+        # fecha o polígono
+        values_closed = values + values[:1]
+        angles_closed = angles + angles[:1]
+
+        ax.plot(angles_closed, values_closed, color=color, linewidth=2)
+        ax.fill(angles_closed, values_closed, color=color, alpha=0.25)
+        ax.set_xticks(angles)
+        ax.set_xticklabels(labels)
+        ax.set_ylim(0, 100)
+        ax.set_yticklabels([])
+        ax.set_title(title)
+
+    plot_radar(ax_lgpd, lgpd_values, 'blue', 'LGPD')
+    plot_radar(ax_cis, cis_values, 'red', 'CIS Controls')
+
     buf = io.BytesIO()
+    fig.tight_layout()
     fig.savefig(buf, format='png', bbox_inches='tight')
     plt.close(fig)
     buf.seek(0)
     img_str = base64.b64encode(buf.getvalue()).decode('utf-8')
-    
+
     report_json = {
         "scores": scores,
-        "percentages": {cat: round(val, 2) for cat, val in zip(categories, values[:-1])},
-        "answers": answers
+        "percentages": percentages,
+        "answers": section_answers
     }
-    
+
     html = '<h2>Resultado da Avaliação de Maturidade</h2>'
     html += f'<img src="data:image/png;base64,{img_str}" alt="Gráfico Radar"><br><br>'
     html += f'<pre>{report_json}</pre>'
