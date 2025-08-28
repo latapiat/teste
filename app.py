@@ -1,4 +1,6 @@
 from flask import Flask, request, render_template_string
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import io
@@ -52,12 +54,6 @@ def form():
 
 @app.route('/result', methods=['POST'])
 def result():
-    import matplotlib.pyplot as plt
-    import numpy as np
-    import io
-    import base64
-    from flask import render_template_string
-
     scores = {section: 0 for section in QUESTIONS}
     answers = {section: [] for section in QUESTIONS}
     for section, questions in QUESTIONS.items():
@@ -82,7 +78,7 @@ def result():
     ax.set_ylim(0, 100)
     
     buf = io.BytesIO()
-    plt.savefig(buf, format='png')
+    fig.savefig(buf, format='png', bbox_inches='tight')
     plt.close(fig)
     buf.seek(0)
     img_str = base64.b64encode(buf.getvalue()).decode('utf-8')
